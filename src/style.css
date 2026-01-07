@@ -1,0 +1,69 @@
+/* Terminux Custom Styles */
+
+/* Terminal styling */
+.terminal-view {
+    padding: 4px;
+}
+
+/* Sidebar styling */
+.sidebar-panel {
+    background-color: @window_bg_color;
+}
+
+.sidebar-header {
+    font-weight: bold;
+    padding: 8px 12px;
+}
+
+/* Session list styling */
+.session-row {
+    padding: 6px 12px;
+    border-radius: 6px;
+}
+
+.session-row:hover {
+    background-color: alpha(@accent_color, 0.1);
+}
+
+.session-row.connected {
+    background-color: alpha(@success_color, 0.1);
+}
+
+/* Connection status indicator */
+.status-indicator {
+    min-width: 8px;
+    min-height: 8px;
+    border-radius: 50%;
+}
+
+.status-indicator.connected {
+    background-color: @success_color;
+}
+
+.status-indicator.disconnected {
+    background-color: @warning_color;
+}
+
+/* File browser styling */
+.file-browser {
+    background-color: @window_bg_color;
+}
+
+.file-row {
+    padding: 4px 8px;
+}
+
+.file-row.directory {
+    font-weight: 500;
+}
+
+/* Tab styling */
+.terminal-tab {
+    min-width: 100px;
+}
+
+/* Paned separator */
+.main-paned > separator {
+    min-width: 1px;
+    background-color: @borders;
+}

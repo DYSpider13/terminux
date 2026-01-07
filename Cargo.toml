@@ -1,0 +1,55 @@
+[package]
+name = "terminux"
+version = "0.1.0"
+edition = "2021"
+authors = ["Your Name <your.email@example.com>"]
+description = "A Linux SSH terminal manager inspired by MobaXterm"
+license = "GPL-3.0"
+repository = "https://github.com/yourusername/terminux"
+keywords = ["ssh", "terminal", "gtk", "linux"]
+categories = ["command-line-utilities", "gui"]
+
+[dependencies]
+# GTK4 and libadwaita for native GNOME UI
+gtk4 = { version = "0.9", features = ["v4_12"] }
+libadwaita = { version = "0.7", features = ["v1_4"] }
+
+# VTE4 for terminal emulation
+vte4 = "0.8"
+
+# SSH and SFTP
+russh = "0.45"
+russh-sftp = "2.0"
+russh-keys = "0.45"
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+async-channel = "2.0"
+async-trait = "0.1"
+futures = "0.3"
+
+# Database and storage
+rusqlite = { version = "0.32", features = ["bundled"] }
+
+# Secret storage (GNOME Keyring) - TODO: Add back when implementing keyring
+# keyring = "3"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+
+# Utilities
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+dirs = "5"
+shellexpand = "3"
+log = "0.4"
+env_logger = "0.11"
+anyhow = "1"
+thiserror = "2"
+
+[profile.release]
+lto = true
+strip = true
+opt-level = "z"

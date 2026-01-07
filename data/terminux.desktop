@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Terminux
+Comment=SSH Terminal Manager
+Exec=terminux
+Icon=org.terminux.Terminux
+Terminal=false
+Type=Application
+Categories=System;TerminalEmulator;Network;
+Keywords=ssh;terminal;remote;server;
+StartupNotify=true
