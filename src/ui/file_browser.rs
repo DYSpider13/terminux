@@ -1,8 +1,9 @@
-use crate::ssh::SftpClient;
+use crate::ssh::{SftpClient, SftpEntry};
 use gtk4::prelude::*;
 use gtk4::subclass::prelude::*;
 use gtk4::glib;
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 mod imp {
@@ -15,6 +16,7 @@ mod imp {
         pub toolbar: gtk4::Box,
         pub sftp_client: RefCell<Option<Arc<SftpClient>>>,
         pub current_path: RefCell<String>,
+        pub entries: RefCell<HashMap<i32, super::FileEntry>>,
     }
 
     impl Default for FileBrowser {
@@ -25,6 +27,7 @@ mod imp {
                 toolbar: gtk4::Box::new(gtk4::Orientation::Horizontal, 4),
                 sftp_client: RefCell::new(None),
                 current_path: RefCell::new("/".to_string()),
+                entries: RefCell::new(HashMap::new()),
             }
         }
     }
@@ -128,29 +131,32 @@ mod imp {
             obj.append(&self.toolbar);
 
             // Handle row activation (directory navigation)
-            let path_ref = self.current_path.clone();
-            let label_ref = self.path_label.clone();
-            let list_ref = self.list_box.clone();
-            self.list_box.connect_row_activated(move |_, row| {
-                // SAFETY: We set this data ourselves with the same type
-                if let Some(entry) = unsafe { row.data::<FileEntry>("file-entry") } {
-                    let entry = unsafe { &*entry.as_ptr() };
-                    if entry.is_directory {
-                        let new_path = if path_ref.borrow().ends_with('/') {
-                            format!("{}{}", path_ref.borrow(), entry.name)
-                        } else {
-                            format!("{}/{}", path_ref.borrow(), entry.name)
-                        };
-                        path_ref.replace(new_path.clone());
-                        label_ref.set_text(&new_path);
-
-                        // Clear and show placeholder (actual loading would happen via SFTP)
-                        while let Some(child) = list_ref.first_child() {
-                            list_ref.remove(&child);
+            self.list_box.connect_row_activated(glib::clone!(
+                #[weak]
+                obj,
+                move |_, row| {
+                    let index = row.index();
+                    let imp = obj.imp();
+                    let entries = imp.entries.borrow();
+                    if let Some(entry) = entries.get(&index) {
+                        if entry.is_directory {
+                            let current = imp.current_path.borrow().clone();
+                            let new_path = if entry.name == ".." {
+                                std::path::Path::new(&current)
+                                    .parent()
+                                    .map(|p| p.to_string_lossy().to_string())
+                                    .unwrap_or_else(|| "/".to_string())
+                            } else if current.ends_with('/') {
+                                format!("{}{}", current, entry.name)
+                            } else {
+                                format!("{}/{}", current, entry.name)
+                            };
+                            drop(entries); // Release borrow before calling load_directory
+                            obj.load_directory(&new_path);
                         }
                     }
                 }
-            });
+            ));
 
             // Show placeholder content
             obj.show_placeholder();
@@ -185,9 +191,34 @@ impl FileBrowser {
         imp.sftp_client.replace(client.clone());
 
         if client.is_some() {
-            self.load_directory("/");
+            // Load home directory
+            self.load_home_directory();
         } else {
             self.show_placeholder();
+        }
+    }
+
+    fn load_home_directory(&self) {
+        let imp = self.imp();
+
+        if let Some(sftp) = imp.sftp_client.borrow().clone() {
+            // Show loading state
+            imp.path_label.set_text("Loading...");
+
+            glib::spawn_future_local(glib::clone!(
+                #[weak(rename_to = browser)]
+                self,
+                async move {
+                    let home = std::thread::spawn(move || {
+                        let rt = tokio::runtime::Runtime::new().unwrap();
+                        rt.block_on(async {
+                            sftp.home_directory().await.unwrap_or_else(|_| "/".to_string())
+                        })
+                    }).join().unwrap_or_else(|_| "/".to_string());
+
+                    browser.load_directory(&home);
+                }
+            ));
         }
     }
 
@@ -197,85 +228,64 @@ impl FileBrowser {
         imp.path_label.set_text(path);
 
         // Clear existing entries
+        imp.entries.borrow_mut().clear();
         while let Some(row) = imp.list_box.first_child() {
             imp.list_box.remove(&row);
         }
 
-        // TODO: Actually load from SFTP
-        // For now, show sample data
-        self.show_sample_files();
-    }
+        // Load from SFTP
+        if let Some(sftp) = imp.sftp_client.borrow().clone() {
+            let path = path.to_string();
 
-    fn show_placeholder(&self) {
-        let imp = self.imp();
-        imp.path_label.set_text("Not connected");
+            // Add loading indicator
+            let loading = gtk4::Spinner::new();
+            loading.start();
+            loading.set_margin_top(20);
+            loading.set_margin_bottom(20);
+            let loading_row = gtk4::ListBoxRow::new();
+            loading_row.set_selectable(false);
+            loading_row.set_child(Some(&loading));
+            imp.list_box.append(&loading_row);
 
-        // Clear existing entries
-        while let Some(row) = imp.list_box.first_child() {
-            imp.list_box.remove(&row);
-        }
+            glib::spawn_future_local(glib::clone!(
+                #[weak(rename_to = browser)]
+                self,
+                async move {
+                    let result = std::thread::spawn(move || {
+                        let rt = tokio::runtime::Runtime::new().unwrap();
+                        rt.block_on(async {
+                            sftp.list_directory(&path).await
+                        })
+                    }).join();
 
-        // Add placeholder message
-        let placeholder = gtk4::Label::new(Some("Connect to a server\nto browse files"));
-        placeholder.set_margin_top(20);
-        placeholder.set_margin_bottom(20);
-        placeholder.add_css_class("dim-label");
-        placeholder.set_justify(gtk4::Justification::Center);
+                    // Clear loading indicator
+                    let imp = browser.imp();
+                    while let Some(row) = imp.list_box.first_child() {
+                        imp.list_box.remove(&row);
+                    }
 
-        let row = gtk4::ListBoxRow::new();
-        row.set_selectable(false);
-        row.set_activatable(false);
-        row.set_child(Some(&placeholder));
-
-        imp.list_box.append(&row);
-    }
-
-    fn show_sample_files(&self) {
-        let entries = vec![
-            FileEntry {
-                name: "..".to_string(),
-                is_directory: true,
-                size: 0,
-                modified: None,
-            },
-            FileEntry {
-                name: "Documents".to_string(),
-                is_directory: true,
-                size: 0,
-                modified: None,
-            },
-            FileEntry {
-                name: "Projects".to_string(),
-                is_directory: true,
-                size: 0,
-                modified: None,
-            },
-            FileEntry {
-                name: ".bashrc".to_string(),
-                is_directory: false,
-                size: 3771,
-                modified: None,
-            },
-            FileEntry {
-                name: ".profile".to_string(),
-                is_directory: false,
-                size: 807,
-                modified: None,
-            },
-            FileEntry {
-                name: "notes.txt".to_string(),
-                is_directory: false,
-                size: 1234,
-                modified: None,
-            },
-        ];
-
-        for entry in entries {
-            self.add_file_entry(&entry);
+                    match result {
+                        Ok(Ok(entries)) => {
+                            for entry in entries {
+                                browser.add_sftp_entry(&entry);
+                            }
+                        }
+                        Ok(Err(e)) => {
+                            log::error!("Failed to list directory: {}", e);
+                            browser.show_error(&format!("Error: {}", e));
+                        }
+                        Err(_) => {
+                            browser.show_error("Failed to list directory");
+                        }
+                    }
+                }
+            ));
+        } else {
+            self.show_placeholder();
         }
     }
 
-    fn add_file_entry(&self, entry: &FileEntry) {
+    fn add_sftp_entry(&self, entry: &SftpEntry) {
         let imp = self.imp();
 
         let row = gtk4::ListBoxRow::new();
@@ -320,11 +330,56 @@ impl FileBrowser {
         hbox.append(&size_label);
 
         row.set_child(Some(&hbox));
+        imp.list_box.append(&row);
 
-        // Store entry data on the row
-        unsafe {
-            row.set_data("file-entry", Box::new(entry.clone()));
+        // Store entry data in HashMap using row index
+        let file_entry = FileEntry {
+            name: entry.name.clone(),
+            is_directory: entry.is_directory,
+            size: entry.size,
+            modified: None,
+        };
+        imp.entries.borrow_mut().insert(row.index(), file_entry);
+    }
+
+    fn show_error(&self, message: &str) {
+        let imp = self.imp();
+
+        let error_label = gtk4::Label::new(Some(message));
+        error_label.set_margin_top(20);
+        error_label.set_margin_bottom(20);
+        error_label.add_css_class("dim-label");
+        error_label.add_css_class("error");
+
+        let row = gtk4::ListBoxRow::new();
+        row.set_selectable(false);
+        row.set_activatable(false);
+        row.set_child(Some(&error_label));
+
+        imp.list_box.append(&row);
+    }
+
+    fn show_placeholder(&self) {
+        let imp = self.imp();
+        imp.path_label.set_text("Not connected");
+
+        // Clear existing entries
+        imp.entries.borrow_mut().clear();
+        while let Some(row) = imp.list_box.first_child() {
+            imp.list_box.remove(&row);
         }
+
+        // Add placeholder message
+        let placeholder = gtk4::Label::new(Some("Connect to a server\nto browse files"));
+        placeholder.set_margin_top(20);
+        placeholder.set_margin_bottom(20);
+        placeholder.add_css_class("dim-label");
+        placeholder.set_justify(gtk4::Justification::Center);
+
+        let row = gtk4::ListBoxRow::new();
+        row.set_selectable(false);
+        row.set_activatable(false);
+        row.set_child(Some(&placeholder));
 
         imp.list_box.append(&row);
     }

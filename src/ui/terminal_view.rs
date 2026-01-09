@@ -12,13 +12,22 @@ mod imp {
     use super::*;
     use async_channel::Sender;
 
-    #[derive(Debug)]
     pub struct TerminalView {
         pub vte: vte4::Terminal,
         pub sftp_client: RefCell<Option<Arc<SftpClient>>>,
         pub is_ssh: RefCell<bool>,
         pub session: RefCell<Option<Session>>,
         pub command_sender: RefCell<Option<Sender<SshCommand>>>,
+        pub sftp_ready_callback: RefCell<Option<Box<dyn Fn(Arc<SftpClient>) + 'static>>>,
+    }
+
+    impl std::fmt::Debug for TerminalView {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.debug_struct("TerminalView")
+                .field("vte", &self.vte)
+                .field("is_ssh", &self.is_ssh)
+                .finish()
+        }
     }
 
     impl Default for TerminalView {
@@ -29,6 +38,7 @@ mod imp {
                 is_ssh: RefCell::new(false),
                 session: RefCell::new(None),
                 command_sender: RefCell::new(None),
+                sftp_ready_callback: RefCell::new(None),
             }
         }
     }
@@ -196,6 +206,8 @@ impl TerminalView {
 
         // Handle events from SSH in the main thread
         glib::spawn_future_local(glib::clone!(
+            #[weak(rename_to = terminal)]
+            self,
             #[weak]
             vte,
             async move {
@@ -213,6 +225,10 @@ impl TerminalView {
                         }
                         SshEvent::Error(err) => {
                             vte.feed(format!("\r\n[Error: {}]\r\n", err).as_bytes());
+                        }
+                        SshEvent::SftpReady(sftp_client) => {
+                            log::info!("SFTP client ready");
+                            terminal.set_sftp_client(Some(sftp_client));
                         }
                     }
                 }
@@ -252,7 +268,19 @@ impl TerminalView {
     }
 
     pub fn set_sftp_client(&self, client: Option<Arc<SftpClient>>) {
-        self.imp().sftp_client.replace(client);
+        let imp = self.imp();
+        if let Some(ref sftp) = client {
+            // Notify callback if set
+            if let Some(callback) = imp.sftp_ready_callback.borrow().as_ref() {
+                callback(sftp.clone());
+            }
+        }
+        imp.sftp_client.replace(client);
+    }
+
+    /// Connect a callback to be called when SFTP becomes ready
+    pub fn connect_sftp_ready<F: Fn(Arc<SftpClient>) + 'static>(&self, f: F) {
+        self.imp().sftp_ready_callback.replace(Some(Box::new(f)));
     }
 
     pub fn feed_data(&self, data: &[u8]) {

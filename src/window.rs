@@ -64,7 +64,7 @@ mod imp {
                                 </child>
                             </object>
                         </child>
-                        <child type="bottom">
+                        <child type="top">
                             <object class="AdwTabBar" id="tab_bar">
                                 <property name="view">tab_view</property>
                             </object>
@@ -154,7 +154,16 @@ glib::wrapper! {
 
 impl TerminuxWindow {
     pub fn new(app: &crate::app::TerminuxApplication) -> Self {
-        glib::Object::builder().property("application", app).build()
+        let window: Self = glib::Object::builder().property("application", app).build();
+
+        // Set up database after window is created (application property is now available)
+        if let Some(db) = app.database() {
+            if let Some(session_list) = window.imp().session_list.borrow().as_ref() {
+                session_list.set_database(db);
+            }
+        }
+
+        window
     }
 
     fn setup_sidebar(&self) {
@@ -169,15 +178,6 @@ impl TerminuxWindow {
         sessions_header.set_halign(gtk4::Align::Start);
 
         let session_list = SessionList::new();
-
-        // Set database if available
-        if let Some(app) = self.application() {
-            if let Some(terminux_app) = app.downcast_ref::<TerminuxApplication>() {
-                if let Some(db) = terminux_app.database() {
-                    session_list.set_database(db);
-                }
-            }
-        }
 
         // Connect session activation
         let window = self.clone();
@@ -280,6 +280,13 @@ impl TerminuxWindow {
         page.set_icon(Some(&gio::ThemedIcon::new("network-server-symbolic")));
 
         imp.tab_view.set_selected_page(&page);
+
+        // Connect SFTP ready callback to update file browser
+        if let Some(file_browser) = imp.file_browser.borrow().clone() {
+            terminal.connect_sftp_ready(move |sftp| {
+                file_browser.set_sftp_client(Some(sftp));
+            });
+        }
 
         // For password auth, we would show a dialog here
         // For now, attempt connection with key auth or empty password

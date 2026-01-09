@@ -1,8 +1,10 @@
+use crate::ssh::SftpClient;
 use crate::storage::{AuthType, Session};
 use async_channel::{Receiver, Sender};
 use russh::client::{self, Config, Handle, Msg};
 use russh::keys::key::PublicKey;
-use russh::{Channel, ChannelId, ChannelMsg, Disconnect};
+use russh::{Channel, ChannelMsg, Disconnect};
+use russh_sftp::client::SftpSession;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -15,12 +17,24 @@ pub enum SshConnectionState {
 }
 
 /// Events sent from SSH to the UI
-#[derive(Debug)]
 pub enum SshEvent {
     Connected,
     Disconnected,
     Data(Vec<u8>),
     Error(String),
+    SftpReady(Arc<SftpClient>),
+}
+
+impl std::fmt::Debug for SshEvent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SshEvent::Connected => write!(f, "Connected"),
+            SshEvent::Disconnected => write!(f, "Disconnected"),
+            SshEvent::Data(d) => write!(f, "Data({} bytes)", d.len()),
+            SshEvent::Error(e) => write!(f, "Error({})", e),
+            SshEvent::SftpReady(_) => write!(f, "SftpReady"),
+        }
+    }
 }
 
 /// Commands sent from UI to SSH
@@ -183,12 +197,42 @@ impl SshConnection {
         // Request shell
         channel.request_shell(false).await?;
 
+        // Open SFTP session before storing handle
+        let event_tx = self.event_tx.clone();
+        let sftp_result = session.channel_open_session().await;
+
         self.handle = Some(session);
         self.channel = Some(channel);
         self.state = SshConnectionState::Connected;
 
         let _ = self.event_tx.send(SshEvent::Connected).await;
         log::info!("SSH connection established successfully");
+
+        // Setup SFTP session in background
+        tokio::spawn(async move {
+            match sftp_result {
+                Ok(sftp_channel) => {
+                    if let Err(e) = sftp_channel.request_subsystem(false, "sftp").await {
+                        log::error!("Failed to request SFTP subsystem: {}", e);
+                        return;
+                    }
+
+                    match SftpSession::new(sftp_channel.into_stream()).await {
+                        Ok(sftp_session) => {
+                            let sftp_client = Arc::new(SftpClient::new(sftp_session));
+                            let _ = event_tx.send(SshEvent::SftpReady(sftp_client)).await;
+                            log::info!("SFTP session established");
+                        }
+                        Err(e) => {
+                            log::error!("Failed to create SFTP session: {}", e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    log::error!("Failed to open SFTP channel: {}", e);
+                }
+            }
+        });
 
         Ok(())
     }
