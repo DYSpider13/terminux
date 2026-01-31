@@ -2342,6 +2342,7 @@ dependencies = [
  "gtk4",
  "libadwaita",
  "log",
+ "rand",
  "rusqlite",
  "russh",
  "russh-keys",

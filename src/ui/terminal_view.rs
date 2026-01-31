@@ -69,27 +69,27 @@ mod imp {
             let font_desc = gtk4::pango::FontDescription::from_string("Monospace 11");
             self.vte.set_font(Some(&font_desc));
 
-            // Set colors (dark theme)
-            let fg = gtk4::gdk::RGBA::parse("#e0e0e0").unwrap();
-            let bg = gtk4::gdk::RGBA::parse("#1e1e1e").unwrap();
+            // Set colors (cyberpunk/Matrix theme)
+            let fg = gtk4::gdk::RGBA::parse("#c5d0dc").unwrap();
+            let bg = gtk4::gdk::RGBA::parse("#0a0e14").unwrap();
 
             let palette: [gtk4::gdk::RGBA; 16] = [
-                gtk4::gdk::RGBA::parse("#1e1e1e").unwrap(), // Black
-                gtk4::gdk::RGBA::parse("#f44747").unwrap(), // Red
-                gtk4::gdk::RGBA::parse("#6a9955").unwrap(), // Green
-                gtk4::gdk::RGBA::parse("#dcdcaa").unwrap(), // Yellow
-                gtk4::gdk::RGBA::parse("#569cd6").unwrap(), // Blue
-                gtk4::gdk::RGBA::parse("#c586c0").unwrap(), // Magenta
-                gtk4::gdk::RGBA::parse("#4ec9b0").unwrap(), // Cyan
-                gtk4::gdk::RGBA::parse("#d4d4d4").unwrap(), // White
-                gtk4::gdk::RGBA::parse("#808080").unwrap(), // Bright Black
-                gtk4::gdk::RGBA::parse("#f44747").unwrap(), // Bright Red
-                gtk4::gdk::RGBA::parse("#6a9955").unwrap(), // Bright Green
-                gtk4::gdk::RGBA::parse("#dcdcaa").unwrap(), // Bright Yellow
-                gtk4::gdk::RGBA::parse("#569cd6").unwrap(), // Bright Blue
-                gtk4::gdk::RGBA::parse("#c586c0").unwrap(), // Bright Magenta
-                gtk4::gdk::RGBA::parse("#4ec9b0").unwrap(), // Bright Cyan
-                gtk4::gdk::RGBA::parse("#e0e0e0").unwrap(), // Bright White
+                gtk4::gdk::RGBA::parse("#0a0e14").unwrap(), // Black
+                gtk4::gdk::RGBA::parse("#ff2e97").unwrap(), // Red (hot pink)
+                gtk4::gdk::RGBA::parse("#00ff41").unwrap(), // Green (neon)
+                gtk4::gdk::RGBA::parse("#ffb700").unwrap(), // Yellow (amber)
+                gtk4::gdk::RGBA::parse("#00e5ff").unwrap(), // Blue (cyan)
+                gtk4::gdk::RGBA::parse("#c74ded").unwrap(), // Magenta (purple)
+                gtk4::gdk::RGBA::parse("#00e5ff").unwrap(), // Cyan
+                gtk4::gdk::RGBA::parse("#c5d0dc").unwrap(), // White
+                gtk4::gdk::RGBA::parse("#4a5568").unwrap(), // Bright Black (dim)
+                gtk4::gdk::RGBA::parse("#ff6ac1").unwrap(), // Bright Red (lighter pink)
+                gtk4::gdk::RGBA::parse("#69ff94").unwrap(), // Bright Green
+                gtk4::gdk::RGBA::parse("#ffd866").unwrap(), // Bright Yellow
+                gtk4::gdk::RGBA::parse("#62efff").unwrap(), // Bright Blue (light cyan)
+                gtk4::gdk::RGBA::parse("#d98ef0").unwrap(), // Bright Magenta
+                gtk4::gdk::RGBA::parse("#62efff").unwrap(), // Bright Cyan
+                gtk4::gdk::RGBA::parse("#eaf2ff").unwrap(), // Bright White
             ];
 
             let palette_refs: Vec<&gtk4::gdk::RGBA> = palette.iter().collect();
@@ -111,6 +111,29 @@ mod imp {
                     log::info!("Terminal child process exited");
                 }
             ));
+
+            // Set up keyboard shortcuts for copy/paste
+            let key_controller = gtk4::EventControllerKey::new();
+            let vte_clone = self.vte.clone();
+            key_controller.connect_key_pressed(move |_, key, _, modifier| {
+                let ctrl = modifier.contains(gtk4::gdk::ModifierType::CONTROL_MASK);
+                let shift = modifier.contains(gtk4::gdk::ModifierType::SHIFT_MASK);
+
+                // Ctrl+Shift+V or Ctrl+V for paste
+                if ctrl && (key == gtk4::gdk::Key::v || key == gtk4::gdk::Key::V) {
+                    vte_clone.paste_clipboard();
+                    return glib::Propagation::Stop;
+                }
+
+                // Ctrl+Shift+C for copy
+                if ctrl && shift && (key == gtk4::gdk::Key::c || key == gtk4::gdk::Key::C) {
+                    vte_clone.copy_clipboard_format(vte4::Format::Text);
+                    return glib::Propagation::Stop;
+                }
+
+                glib::Propagation::Proceed
+            });
+            self.vte.add_controller(key_controller);
         }
     }
 
@@ -179,13 +202,33 @@ impl TerminalView {
             });
         });
 
-        // Handle terminal resize
-        let cmd_tx_resize = command_tx.clone();
-        imp.vte.connect_resize_window(move |terminal, cols, rows| {
-            let tx = cmd_tx_resize.clone();
+        // Send initial terminal size after a short delay to ensure connection is ready
+        let cmd_tx_init = command_tx.clone();
+        let vte_init = imp.vte.clone();
+        glib::timeout_add_local_once(std::time::Duration::from_millis(500), move || {
+            let cols = vte_init.column_count() as u32;
+            let rows = vte_init.row_count() as u32;
+            let tx = cmd_tx_init.clone();
             glib::spawn_future_local(async move {
-                let _ = tx.send(SshCommand::Resize(cols as u32, rows as u32)).await;
+                let _ = tx.send(SshCommand::Resize(cols, rows)).await;
             });
+        });
+
+        // Handle terminal resize using size-allocate signal
+        let cmd_tx_resize = command_tx.clone();
+        let vte_resize = imp.vte.clone();
+        let last_size: std::rc::Rc<std::cell::Cell<(i64, i64)>> = std::rc::Rc::new(std::cell::Cell::new((0, 0)));
+        imp.vte.connect_notify_local(Some("columns"), move |_, _| {
+            let cols = vte_resize.column_count();
+            let rows = vte_resize.row_count();
+            let current = (cols, rows);
+            if last_size.get() != current {
+                last_size.set(current);
+                let tx = cmd_tx_resize.clone();
+                glib::spawn_future_local(async move {
+                    let _ = tx.send(SshCommand::Resize(cols as u32, rows as u32)).await;
+                });
+            }
         });
 
         // Spawn SSH connection task on a tokio runtime (russh requires tokio)

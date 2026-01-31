@@ -1,69 +1,320 @@
-/* Terminux Custom Styles */
+/* Terminux Cyberpunk/Matrix Theme */
 
-/* Terminal styling */
-.terminal-view {
-    padding: 4px;
+/* === Color Definitions === */
+@define-color theme_bg #0a0e14;
+@define-color theme_surface #0d1117;
+@define-color theme_border rgba(0, 255, 65, 0.19);
+@define-color theme_primary #00ff41;
+@define-color theme_secondary #00e5ff;
+@define-color theme_tertiary #ff2e97;
+@define-color theme_warning #ffb700;
+@define-color theme_text #c5d0dc;
+@define-color theme_dim #4a5568;
+
+/* === Override libadwaita base colors === */
+@define-color window_bg_color #0a0e14;
+@define-color window_fg_color #c5d0dc;
+@define-color view_bg_color #0a0e14;
+@define-color view_fg_color #c5d0dc;
+@define-color headerbar_bg_color #0d1117;
+@define-color headerbar_fg_color #c5d0dc;
+@define-color headerbar_border_color rgba(0, 255, 65, 0.19);
+@define-color card_bg_color #0d1117;
+@define-color card_fg_color #c5d0dc;
+@define-color popover_bg_color #0d1117;
+@define-color popover_fg_color #c5d0dc;
+@define-color dialog_bg_color #0d1117;
+@define-color dialog_fg_color #c5d0dc;
+@define-color sidebar_bg_color #0d1117;
+@define-color sidebar_fg_color #c5d0dc;
+@define-color accent_bg_color #00ff41;
+@define-color accent_fg_color #0a0e14;
+@define-color accent_color #00ff41;
+@define-color success_color #00ff41;
+@define-color warning_color #ffb700;
+@define-color error_color #ff2e97;
+@define-color destructive_color #ff2e97;
+@define-color borders rgba(0, 255, 65, 0.19);
+
+/* === Window & global === */
+window, .background {
+    background-color: @theme_bg;
+    color: @theme_text;
 }
 
-/* Sidebar styling */
+/* === Headerbar === */
+headerbar {
+    background-color: @theme_surface;
+    border-bottom: 1px solid @theme_border;
+    box-shadow: 0 1px 8px rgba(0, 255, 65, 0.06);
+}
+
+headerbar .title {
+    color: @theme_primary;
+    font-weight: 700;
+    text-shadow: 0 0 6px rgba(0, 255, 65, 0.4);
+}
+
+headerbar button {
+    color: @theme_text;
+}
+
+headerbar button:hover {
+    color: @theme_primary;
+    background-color: rgba(0, 255, 65, 0.08);
+}
+
+headerbar button:active {
+    background-color: rgba(0, 255, 65, 0.15);
+}
+
+/* === Tab bar / Notebook === */
+tabbar, notebook header {
+    background-color: @theme_surface;
+    border-bottom: 1px solid @theme_border;
+}
+
+tabbar tab,
+notebook header tab {
+    color: @theme_dim;
+    border-bottom: 2px solid transparent;
+    padding: 6px 14px;
+    transition: all 150ms ease;
+}
+
+tabbar tab:hover,
+notebook header tab:hover {
+    color: @theme_secondary;
+    background-color: rgba(0, 229, 255, 0.05);
+}
+
+tabbar tab:checked,
+notebook header tab:checked {
+    color: @theme_primary;
+    border-bottom-color: @theme_primary;
+    background-color: rgba(0, 255, 65, 0.06);
+    box-shadow: 0 1px 4px rgba(0, 255, 65, 0.1);
+}
+
+.terminal-tab {
+    min-width: 100px;
+}
+
+/* === Terminal view === */
+.terminal-view {
+    padding: 2px;
+    background-color: @theme_bg;
+}
+
+/* === Sidebar === */
 .sidebar-panel {
-    background-color: @window_bg_color;
+    background-color: @theme_surface;
+    border-right: 1px solid @theme_border;
 }
 
 .sidebar-header {
     font-weight: bold;
     padding: 8px 12px;
+    color: @theme_primary;
+    text-shadow: 0 0 6px rgba(0, 255, 65, 0.35);
 }
 
-/* Session list styling */
+/* === Session list === */
 .session-row {
-    padding: 6px 12px;
+    padding: 8px 12px;
     border-radius: 6px;
+    border: 1px solid transparent;
+    transition: all 150ms ease;
 }
 
 .session-row:hover {
-    background-color: alpha(@accent_color, 0.1);
+    background-color: rgba(0, 255, 65, 0.06);
+    border-color: rgba(0, 255, 65, 0.12);
 }
 
 .session-row.connected {
-    background-color: alpha(@success_color, 0.1);
+    background-color: rgba(0, 255, 65, 0.08);
+    border-color: rgba(0, 255, 65, 0.2);
 }
 
-/* Connection status indicator */
+/* === Status indicator with glow === */
 .status-indicator {
     min-width: 8px;
     min-height: 8px;
     border-radius: 50%;
+    transition: all 200ms ease;
 }
 
 .status-indicator.connected {
-    background-color: @success_color;
+    background-color: @theme_primary;
+    box-shadow: 0 0 6px rgba(0, 255, 65, 0.7), 0 0 12px rgba(0, 255, 65, 0.3);
 }
 
 .status-indicator.disconnected {
-    background-color: @warning_color;
+    background-color: @theme_dim;
+    box-shadow: none;
 }
 
-/* File browser styling */
+/* === File browser === */
 .file-browser {
-    background-color: @window_bg_color;
+    background-color: @theme_surface;
 }
 
 .file-row {
     padding: 4px 8px;
+    border-radius: 4px;
+    transition: all 100ms ease;
+}
+
+.file-row:hover {
+    background-color: rgba(0, 229, 255, 0.06);
 }
 
 .file-row.directory {
     font-weight: 500;
+    color: @theme_secondary;
 }
 
-/* Tab styling */
-.terminal-tab {
-    min-width: 100px;
-}
-
-/* Paned separator */
+/* === Paned separator (neon line) === */
 .main-paned > separator {
     min-width: 1px;
-    background-color: @borders;
+    background-color: @theme_primary;
+    opacity: 0.25;
+    box-shadow: 0 0 4px rgba(0, 255, 65, 0.3);
+}
+
+/* === Buttons === */
+button.suggested-action {
+    background-color: rgba(0, 255, 65, 0.15);
+    color: @theme_primary;
+    border: 1px solid rgba(0, 255, 65, 0.3);
+    box-shadow: 0 0 6px rgba(0, 255, 65, 0.15);
+}
+
+button.suggested-action:hover {
+    background-color: rgba(0, 255, 65, 0.25);
+    box-shadow: 0 0 10px rgba(0, 255, 65, 0.25);
+}
+
+button.destructive-action {
+    background-color: rgba(255, 46, 151, 0.15);
+    color: @theme_tertiary;
+    border: 1px solid rgba(255, 46, 151, 0.3);
+    box-shadow: 0 0 6px rgba(255, 46, 151, 0.15);
+}
+
+button.destructive-action:hover {
+    background-color: rgba(255, 46, 151, 0.25);
+    box-shadow: 0 0 10px rgba(255, 46, 151, 0.25);
+}
+
+button.flat {
+    color: @theme_text;
+}
+
+button.flat:hover {
+    color: @theme_primary;
+    background-color: rgba(0, 255, 65, 0.08);
+}
+
+/* === Entries / inputs with glow on focus === */
+entry, spinbutton {
+    background-color: rgba(10, 14, 20, 0.8);
+    color: @theme_text;
+    border: 1px solid @theme_border;
+    border-radius: 6px;
+    caret-color: @theme_primary;
+}
+
+entry:focus-within, spinbutton:focus-within {
+    border-color: rgba(0, 255, 65, 0.5);
+    box-shadow: 0 0 6px rgba(0, 255, 65, 0.2), 0 0 12px rgba(0, 255, 65, 0.08);
+}
+
+/* === Dialogs === */
+dialog, messagedialog, window.dialog {
+    background-color: @theme_surface;
+    border: 1px solid @theme_border;
+}
+
+/* === Lists (boxed-list) === */
+list, listview, .boxed-list {
+    background-color: transparent;
+}
+
+list row, listview row {
+    color: @theme_text;
+}
+
+list row:hover, listview row:hover {
+    background-color: rgba(0, 255, 65, 0.04);
+}
+
+list row:selected, listview row:selected {
+    background-color: rgba(0, 255, 65, 0.1);
+    color: @theme_primary;
+}
+
+/* === Labels === */
+.dim-label {
+    color: @theme_dim;
+}
+
+.heading {
+    color: @theme_secondary;
+}
+
+.caption {
+    color: @theme_dim;
+    font-size: 0.85em;
+}
+
+.error {
+    color: @theme_tertiary;
+}
+
+/* === Scrollbar styling === */
+scrollbar {
+    background-color: transparent;
+}
+
+scrollbar slider {
+    background-color: rgba(0, 255, 65, 0.15);
+    border-radius: 9999px;
+    min-width: 6px;
+    min-height: 6px;
+}
+
+scrollbar slider:hover {
+    background-color: rgba(0, 255, 65, 0.3);
+}
+
+scrollbar slider:active {
+    background-color: rgba(0, 255, 65, 0.45);
+}
+
+/* === Popovers & menus === */
+popover, popover.background {
+    background-color: @theme_surface;
+    border: 1px solid @theme_border;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5), 0 0 8px rgba(0, 255, 65, 0.08);
+}
+
+popover modelbutton:hover, popover button.flat:hover {
+    background-color: rgba(0, 255, 65, 0.08);
+    color: @theme_primary;
+}
+
+/* === Tooltip === */
+tooltip, tooltip.background {
+    background-color: @theme_surface;
+    color: @theme_text;
+    border: 1px solid @theme_border;
+    box-shadow: 0 0 6px rgba(0, 255, 65, 0.1);
+}
+
+/* === Selection === */
+selection {
+    background-color: rgba(0, 255, 65, 0.2);
+    color: @theme_text;
 }

@@ -1,5 +1,5 @@
 use crate::app::TerminuxApplication;
-use crate::ui::{FileBrowser, SessionList, TerminalView};
+use crate::ui::{FileBrowser, MatrixRain, SessionList, TerminalView};
 use gtk4::prelude::*;
 use gtk4::subclass::prelude::*;
 use gtk4::{gio, glib};
@@ -19,54 +19,58 @@ mod imp {
                 <property name="default-width">1200</property>
                 <property name="default-height">800</property>
                 <child>
-                    <object class="AdwToolbarView">
-                        <child type="top">
-                            <object class="AdwHeaderBar" id="header_bar">
-                                <child type="start">
-                                    <object class="GtkButton" id="new_session_btn">
-                                        <property name="icon-name">list-add-symbolic</property>
-                                        <property name="tooltip-text">New Session (Ctrl+Shift+N)</property>
-                                        <property name="action-name">app.new-session</property>
-                                    </object>
-                                </child>
-                                <child type="end">
-                                    <object class="GtkMenuButton" id="menu_button">
-                                        <property name="icon-name">open-menu-symbolic</property>
-                                        <property name="menu-model">primary_menu</property>
-                                        <property name="tooltip-text">Main Menu</property>
-                                    </object>
-                                </child>
-                            </object>
-                        </child>
+                    <object class="GtkOverlay" id="main_overlay">
                         <child>
-                            <object class="GtkPaned" id="main_paned">
-                                <property name="orientation">horizontal</property>
-                                <property name="position">800</property>
-                                <property name="shrink-start-child">false</property>
-                                <property name="shrink-end-child">false</property>
-                                <property name="resize-start-child">true</property>
-                                <property name="resize-end-child">false</property>
-                                <style>
-                                    <class name="main-paned"/>
-                                </style>
-                                <child>
-                                    <object class="AdwTabView" id="tab_view">
+                            <object class="AdwToolbarView">
+                                <child type="top">
+                                    <object class="AdwHeaderBar" id="header_bar">
+                                        <child type="start">
+                                            <object class="GtkButton" id="new_session_btn">
+                                                <property name="icon-name">list-add-symbolic</property>
+                                                <property name="tooltip-text">New Session (Ctrl+Shift+N)</property>
+                                                <property name="action-name">app.new-session</property>
+                                            </object>
+                                        </child>
+                                        <child type="end">
+                                            <object class="GtkMenuButton" id="menu_button">
+                                                <property name="icon-name">open-menu-symbolic</property>
+                                                <property name="menu-model">primary_menu</property>
+                                                <property name="tooltip-text">Main Menu</property>
+                                            </object>
+                                        </child>
                                     </object>
                                 </child>
                                 <child>
-                                    <object class="GtkBox" id="sidebar_box">
-                                        <property name="orientation">vertical</property>
-                                        <property name="width-request">300</property>
+                                    <object class="GtkPaned" id="main_paned">
+                                        <property name="orientation">horizontal</property>
+                                        <property name="position">800</property>
+                                        <property name="shrink-start-child">false</property>
+                                        <property name="shrink-end-child">false</property>
+                                        <property name="resize-start-child">true</property>
+                                        <property name="resize-end-child">false</property>
                                         <style>
-                                            <class name="sidebar-panel"/>
+                                            <class name="main-paned"/>
                                         </style>
+                                        <child>
+                                            <object class="AdwTabView" id="tab_view">
+                                            </object>
+                                        </child>
+                                        <child>
+                                            <object class="GtkBox" id="sidebar_box">
+                                                <property name="orientation">vertical</property>
+                                                <property name="width-request">300</property>
+                                                <style>
+                                                    <class name="sidebar-panel"/>
+                                                </style>
+                                            </object>
+                                        </child>
                                     </object>
                                 </child>
-                            </object>
-                        </child>
-                        <child type="top">
-                            <object class="AdwTabBar" id="tab_bar">
-                                <property name="view">tab_view</property>
+                                <child type="top">
+                                    <object class="AdwTabBar" id="tab_bar">
+                                        <property name="view">tab_view</property>
+                                    </object>
+                                </child>
                             </object>
                         </child>
                     </object>
@@ -107,6 +111,8 @@ mod imp {
         pub main_paned: TemplateChild<gtk4::Paned>,
         #[template_child]
         pub sidebar_box: TemplateChild<gtk4::Box>,
+        #[template_child]
+        pub main_overlay: TemplateChild<gtk4::Overlay>,
 
         pub session_list: RefCell<Option<SessionList>>,
         pub file_browser: RefCell<Option<FileBrowser>>,
@@ -134,6 +140,7 @@ mod imp {
             obj.setup_sidebar();
             obj.setup_tab_view();
             obj.setup_actions();
+            obj.setup_matrix_rain();
 
             // Add initial local terminal tab
             obj.add_local_terminal_tab();
@@ -164,6 +171,15 @@ impl TerminuxWindow {
         }
 
         window
+    }
+
+    fn setup_matrix_rain(&self) {
+        let rain = MatrixRain::new();
+        rain.set_can_target(false);
+        rain.set_can_focus(false);
+        rain.set_hexpand(true);
+        rain.set_vexpand(true);
+        self.imp().main_overlay.add_overlay(&rain);
     }
 
     fn setup_sidebar(&self) {
