@@ -14,7 +14,7 @@ A modern Linux SSH terminal manager inspired by MobaXterm, built with GTK4 and R
 
 ## Screenshots
 
-*Coming soon*
+![Terminux Screenshot](data/screenshot.png)
 
 ## Installation
 
