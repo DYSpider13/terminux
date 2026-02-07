@@ -95,13 +95,27 @@ mod imp {
             let palette_refs: Vec<&gtk4::gdk::RGBA> = palette.iter().collect();
             self.vte.set_colors(Some(&fg), Some(&bg), &palette_refs);
 
-            // Create scrolled window for terminal
-            let scrolled = gtk4::ScrolledWindow::new();
-            scrolled.set_child(Some(&self.vte));
-            scrolled.set_vexpand(true);
-            scrolled.set_hexpand(true);
+            // VTE handles its own scrolling, so add it directly without ScrolledWindow
+            // Using ScrolledWindow can cause conflicts with VTE's internal scroll buffer
+            // and readline features like Ctrl+R (reverse search)
+            self.vte.set_vexpand(true);
+            self.vte.set_hexpand(true);
 
-            obj.append(&scrolled);
+            obj.append(&self.vte);
+
+            // Keep PTY size in sync with VTE's actual column/row count.
+            // VTE should do this internally, but when the widget is inside
+            // AdwTabView + GtkPaned, resize events can be missed.
+            let vte_sync = self.vte.clone();
+            self.vte.connect_notify_local(Some("columns"), move |_, _| {
+                if let Some(pty) = vte_sync.pty() {
+                    let rows = vte_sync.row_count() as i32;
+                    let cols = vte_sync.column_count() as i32;
+                    if cols > 0 && rows > 0 {
+                        let _ = pty.set_size(rows, cols);
+                    }
+                }
+            });
 
             // Connect terminal signals
             self.vte.connect_child_exited(glib::clone!(
@@ -280,30 +294,44 @@ impl TerminalView {
     }
 
     fn spawn_local_shell(&self) {
-        let imp = self.imp();
+        let vte = self.imp().vte.clone();
 
-        // Get user's shell
-        let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string());
+        // Defer shell spawn until GTK has allocated the widget.
+        // If we spawn immediately during constructed(), the PTY gets default 80x24
+        // dimensions. The shell's readline then wraps commands at column 80 instead
+        // of the actual terminal width, causing text overlap on long commands.
+        glib::idle_add_local_once(move || {
+            let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string());
+            let term_env = "TERM=xterm-256color";
 
-        // Spawn the shell process
-        let pty_flags = vte4::PtyFlags::DEFAULT;
-
-        imp.vte.spawn_async(
-            pty_flags,
-            None,                    // working directory (None = current)
-            &[&shell],               // command
-            &[],                     // environment
-            glib::SpawnFlags::DEFAULT,
-            || {},                   // child setup
-            -1,                      // timeout (-1 = default)
-            None::<&gtk4::gio::Cancellable>,
-            |result| {
-                match result {
-                    Ok(_pid) => log::debug!("Shell spawned successfully"),
-                    Err(e) => log::error!("Failed to spawn shell: {}", e),
-                }
-            },
-        );
+            let vte_resize = vte.clone();
+            vte.spawn_async(
+                vte4::PtyFlags::DEFAULT,
+                None,
+                &[&shell],
+                &[term_env],
+                glib::SpawnFlags::DEFAULT,
+                || {},
+                -1,
+                None::<&gtk4::gio::Cancellable>,
+                move |result| {
+                    match result {
+                        Ok(_pid) => {
+                            log::debug!("Shell spawned successfully");
+                            // Force-sync PTY size with actual VTE dimensions.
+                            // Even after idle, there can be a brief race where the PTY
+                            // was created with stale dimensions.
+                            if let Some(pty) = vte_resize.pty() {
+                                let rows = vte_resize.row_count() as i32;
+                                let cols = vte_resize.column_count() as i32;
+                                let _ = pty.set_size(rows, cols);
+                            }
+                        }
+                        Err(e) => log::error!("Failed to spawn shell: {}", e),
+                    }
+                },
+            );
+        });
     }
 
     pub fn get_sftp_client(&self) -> Option<Arc<SftpClient>> {

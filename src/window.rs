@@ -174,12 +174,10 @@ impl TerminuxWindow {
     }
 
     fn setup_matrix_rain(&self) {
-        let rain = MatrixRain::new();
-        rain.set_can_target(false);
-        rain.set_can_focus(false);
-        rain.set_hexpand(true);
-        rain.set_vexpand(true);
-        self.imp().main_overlay.add_overlay(&rain);
+        // Matrix rain is now applied only to the sidebar (see setup_sidebar)
+        // to avoid interfering with VTE terminal rendering.
+        // Drawing an animated overlay on top of the terminal causes text blending
+        // and cursor issues with readline (Ctrl+R, long commands).
     }
 
     fn setup_sidebar(&self) {
@@ -227,7 +225,20 @@ impl TerminuxWindow {
         sidebar_paned.set_end_child(Some(&browser_frame));
         sidebar_paned.set_position(350);
 
-        imp.sidebar_box.append(&sidebar_paned);
+        // Wrap sidebar in an overlay for the matrix rain effect
+        let sidebar_overlay = gtk4::Overlay::new();
+        sidebar_overlay.set_child(Some(&sidebar_paned));
+        sidebar_overlay.set_vexpand(true);
+        sidebar_overlay.set_hexpand(true);
+
+        let rain = MatrixRain::new();
+        rain.set_can_target(false);
+        rain.set_can_focus(false);
+        rain.set_hexpand(true);
+        rain.set_vexpand(true);
+        sidebar_overlay.add_overlay(&rain);
+
+        imp.sidebar_box.append(&sidebar_overlay);
 
         // Store references
         imp.session_list.replace(Some(session_list));

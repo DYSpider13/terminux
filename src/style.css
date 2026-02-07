@@ -102,8 +102,13 @@ notebook header tab:checked {
 
 /* === Terminal view === */
 .terminal-view {
-    padding: 2px;
     background-color: @theme_bg;
+}
+
+/* Prevent any theme from adding padding to VTE that would
+   cause a mismatch between VTE's column count and the PTY */
+vte-terminal {
+    padding: 0;
 }
 
 /* === Sidebar === */
