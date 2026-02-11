@@ -103,20 +103,6 @@ mod imp {
 
             obj.append(&self.vte);
 
-            // Keep PTY size in sync with VTE's actual column/row count.
-            // VTE should do this internally, but when the widget is inside
-            // AdwTabView + GtkPaned, resize events can be missed.
-            let vte_sync = self.vte.clone();
-            self.vte.connect_notify_local(Some("columns"), move |_, _| {
-                if let Some(pty) = vte_sync.pty() {
-                    let rows = vte_sync.row_count() as i32;
-                    let cols = vte_sync.column_count() as i32;
-                    if cols > 0 && rows > 0 {
-                        let _ = pty.set_size(rows, cols);
-                    }
-                }
-            });
-
             // Connect terminal signals
             self.vte.connect_child_exited(glib::clone!(
                 #[weak]
@@ -151,7 +137,23 @@ mod imp {
         }
     }
 
-    impl WidgetImpl for TerminalView {}
+    impl WidgetImpl for TerminalView {
+        fn size_allocate(&self, width: i32, height: i32, baseline: i32) {
+            // Let the Box allocate VTE first so it recalculates columns/rows
+            self.parent_size_allocate(width, height, baseline);
+
+            // Force-sync PTY dimensions with VTE's actual column/row count.
+            // This fires on every layout change (window resize, paned drag, etc.)
+            // and ensures the shell always has the correct COLUMNS/LINES values.
+            if let Some(pty) = self.vte.pty() {
+                let rows = self.vte.row_count() as i32;
+                let cols = self.vte.column_count() as i32;
+                if cols > 0 && rows > 0 {
+                    let _ = pty.set_size(rows, cols);
+                }
+            }
+        }
+    }
     impl BoxImpl for TerminalView {}
 }
 
